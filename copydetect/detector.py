@@ -232,6 +232,7 @@ class CopyDetector:
                  same_name_only=False, ignore_leaf=False, autoopen=True,
                  disable_filtering=False, force_language=None,
                  truncate=False, out_file="./report.html", silent=False):
+        print("Initializing CopyDetector")
         if config is not None:
             # temporary workaround to ensure existing code continues
             # to work
