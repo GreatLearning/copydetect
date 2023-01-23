@@ -9,14 +9,15 @@ import warnings
 from pygments import lexers, token
 import pygments.util
 import numpy as np
-from markupsafe import escape
+# from markupsafe import escape
 
 # if the C extention is available, use it. For almost all use cases
 # the speed difference is not significant so if the C extention isn't
 # found copydetect will silenty switch to the python implementation.
 try:
     from .winnow import _winnow
-except (ModuleNotFoundError, ImportError):
+# removing ModuleNotFoundError as this is not supported in python 3.4
+except (ImportError):
     from .pywinnow import _winnow
 
 def filter_code(code, filename, language=None):
@@ -35,11 +36,11 @@ def filter_code(code, filename, language=None):
             lexer = lexers.get_lexer_for_filename(filename)
         tokens = lexer.get_tokens(code)
     except pygments.util.ClassNotFound:
-        logging.warning(f"{filename} not tokenized: unknown file extension")
+        logging.warning("{} not tokenized: unknown file extension".format(filename))
         return code, np.array([])
 
     if lexer == pygments.lexers.TextLexer:
-        logging.warning(f"did not tokenize plaintext file {filename}")
+        logging.warning("did not tokenize plaintext file {}".format(filename))
         return code, np.array([])
 
     out_code = ""
