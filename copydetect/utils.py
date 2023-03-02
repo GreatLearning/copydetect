@@ -151,7 +151,7 @@ def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
     """
     overlap, ol_idx1, ol_idx2 = np.intersect1d(hashes1, hashes2,
         return_indices=True, assume_unique=True)
-    return idx1[ol_idx1], idx2[ol_idx2]
+    return ol_idx1, idx1[ol_idx1], idx2[ol_idx2]
 
 def highlight_overlap(doc, slices, left_hl, right_hl,
                       truncate=-1, escape_html=False):
