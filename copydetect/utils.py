@@ -34,7 +34,8 @@ def filter_code(code, filename, language=None):
             lexer = lexers.get_lexer_by_name(language)
         else:
             lexer = lexers.get_lexer_for_filename(filename)
-        tokens = lexer.get_tokens(code)
+        # convert all tokens to lower case
+        tokens = lexer.get_tokens(code.lower())
     except pygments.util.ClassNotFound:
         logging.warning("{} not tokenized: unknown file extension".format(filename))
         return code, np.array([])
@@ -134,13 +135,20 @@ def get_document_fingerprints(doc, k, window_size, boilerplate=[]):
     list of boilerplate hashes to remove from the winnowed list.
     Returns the selected hashes and their indexes in the original list
     """
-    hashes, idx = winnow(hashed_kgrams(doc, k=k), window_size=window_size)
+    hashes, idx = winnow(hashed_kgrams(doc, k=k), window_size=window_size,
+                         remove_duplicates=False)
     if len(boilerplate) > 0:
-        _, overlap_idx, _ = np.intersect1d(hashes, boilerplate,
-                                           return_indices=True,
-                                           assume_unique=True)
-        idx = np.delete(idx, overlap_idx)
-        hashes = np.delete(hashes, overlap_idx)
+        # _, overlap_idx, _ = np.intersect1d(hashes, boilerplate,
+        #                                    return_indices=True,
+        #                                    assume_unique=True)
+        # idx = np.delete(idx, overlap_idx)
+        # hashes = np.delete(hashes, overlap_idx)
+
+        # Doing this way instead of np.intersect1d, and delete after that is because
+        #  preserves the duplicates in the original array(hashes)
+        hash_mask = np.isin(hashes, boilerplate, invert=True)
+        hashes = hashes[hash_mask]
+        idx = idx[hash_mask]
     return hashes, idx
 
 def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
@@ -149,9 +157,14 @@ def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
     and one for the second. The indexes of the original hashes are
     provided in case boilerplate results in gaps.
     """
-    overlap, ol_idx1, ol_idx2 = np.intersect1d(hashes1, hashes2,
-        return_indices=True, assume_unique=True)
-    return ol_idx1, idx1[ol_idx1], idx2[ol_idx2]
+    # overlap, ol_idx1, ol_idx2 = np.intersect1d(hashes1, hashes2,
+    #     return_indices=True, assume_unique=True)
+    # This will keep the duplicate indexes also
+    hashes1_mask = np.isin(hashes1, hashes2)
+    hashes2_mask = np.isin(hashes2, hashes1)
+
+    # return ol_idx1, idx1[ol_idx1], idx2[ol_idx2]
+    return  hashes1[hashes1_mask], idx1[hashes1_mask], idx2[hashes2_mask]
 
 def highlight_overlap(doc, slices, left_hl, right_hl,
                       truncate=-1, escape_html=False):
