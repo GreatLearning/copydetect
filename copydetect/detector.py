@@ -126,13 +126,13 @@ def compare_files(file1_data, file2_data):
         raise ValueError("Code fingerprints must use the same noise threshold")
     # we are returning the actual indices of the file1_data.hashes
     # we need this to calculate the overall copied slices across all the files
-    hashes_overlap1, idx1, idx2 = find_fingerprint_overlap(
+    idx1, idx2 = find_fingerprint_overlap(
         file1_data.hashes, file2_data.hashes,
         file1_data.hash_idx, file2_data.hash_idx)
     slices1 = get_copied_slices(idx1, file1_data.k)
     slices2 = get_copied_slices(idx2, file2_data.k)
     if len(slices1[0]) == 0:
-        return 0, 0, (0,0), (np.array([]), np.array([]))
+        return np.array([]), 0, (0,0), (np.array([]), np.array([]))
 
     token_overlap1 = np.sum(slices1[1] - slices1[0])
     token_overlap2 = np.sum(slices2[1] - slices2[0])
@@ -154,8 +154,9 @@ def compare_files(file1_data, file2_data):
         slices2 += file2_data.offsets[:,1][np.clip(
             np.searchsorted(file2_data.offsets[:,0], slices2),
             0, file2_data.offsets.shape[0] - 1)]
-
-    return hashes_overlap1, token_overlap1, (similarity1,similarity2), (slices1,slices2)
+    # Need Ids to track the copied hashes in the test file when comparing
+    # with multiple reference files.
+    return idx1, token_overlap1, (similarity1,similarity2), (slices1,slices2)
 
 class CopyDetector:
     """Main plagairism detection class. Searches provided directories

@@ -164,7 +164,7 @@ def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
     hashes2_mask = np.isin(hashes2, hashes1)
 
     # return ol_idx1, idx1[ol_idx1], idx2[ol_idx2]
-    return  hashes1[hashes1_mask], idx1[hashes1_mask], idx2[hashes2_mask]
+    return idx1[hashes1_mask], idx2[hashes2_mask]
 
 def highlight_overlap(doc, slices, left_hl, right_hl,
                       truncate=-1, escape_html=False):
