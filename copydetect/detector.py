@@ -14,8 +14,8 @@ import warnings
 
 from tqdm import tqdm
 import numpy as np
-import matplotlib.pyplot as plt
-from jinja2 import Template
+# import matplotlib.pyplot as plt
+# from jinja2 import Template
 
 from .utils import (filter_code, highlight_overlap, get_copied_slices,
                     get_document_fingerprints, find_fingerprint_overlap,
@@ -124,13 +124,15 @@ def compare_files(file1_data, file2_data):
     """
     if file1_data.k != file2_data.k:
         raise ValueError("Code fingerprints must use the same noise threshold")
+    # we are returning the actual indices of the file1_data.hashes
+    # we need this to calculate the overall copied slices across all the files
     idx1, idx2 = find_fingerprint_overlap(
         file1_data.hashes, file2_data.hashes,
         file1_data.hash_idx, file2_data.hash_idx)
     slices1 = get_copied_slices(idx1, file1_data.k)
     slices2 = get_copied_slices(idx2, file2_data.k)
     if len(slices1[0]) == 0:
-        return 0, (0,0), (np.array([]), np.array([]))
+        return np.array([]), 0, (0,0), (np.array([]), np.array([]))
 
     token_overlap1 = np.sum(slices1[1] - slices1[0])
     token_overlap2 = np.sum(slices2[1] - slices2[0])
@@ -152,8 +154,9 @@ def compare_files(file1_data, file2_data):
         slices2 += file2_data.offsets[:,1][np.clip(
             np.searchsorted(file2_data.offsets[:,0], slices2),
             0, file2_data.offsets.shape[0] - 1)]
-
-    return token_overlap1, (similarity1,similarity2), (slices1,slices2)
+    # Need Ids to track the copied hashes in the test file when comparing
+    # with multiple reference files.
+    return idx1, token_overlap1, (similarity1,similarity2), (slices1,slices2)
 
 class CopyDetector:
     """Main plagairism detection class. Searches provided directories
@@ -232,20 +235,20 @@ class CopyDetector:
                  same_name_only=False, ignore_leaf=False, autoopen=True,
                  disable_filtering=False, force_language=None,
                  truncate=False, out_file="./report.html", silent=False):
-        if config is not None:
-            # temporary workaround to ensure existing code continues
-            # to work
-            warnings.warn(
-                "use CopyDetector.from_config to initialize CopyDetector from "
-                "a config file. The config parameter is deprecated and will be"
-                " removed in a future version.",
-                DeprecationWarning, stacklevel=2
-            )
-            args = locals()
-            del args["self"]
-            del args["config"]
-            self.__init__(**{**args, **self._read_config(config)})
-            return
+        # if config is not None:
+        #     # temporary workaround to ensure existing code continues
+        #     # to work
+        #     warnings.warn(
+        #         "use CopyDetector.from_config to initialize CopyDetector from "
+        #         "a config file. The config parameter is deprecated and will be"
+        #         " removed in a future version.",
+        #         DeprecationWarning, stacklevel=2
+        #     )
+        #     args = locals()
+        #     del args["self"]
+        #     del args["config"]
+        #     self.__init__(**{**args, **self._read_config(config)})
+        #     return
 
         self.silent = silent
         self.test_dirs = test_dirs
@@ -458,7 +461,7 @@ class CopyDetector:
                                             language=self.force_language)
                 boilerplate_hashes.extend(fingerprint.hashes)
             except UnicodeDecodeError:
-                logging.warning(f"Skipping {file}: file not ASCII text")
+                logging.warning("Skipping "+file+" file not ASCII text")
                 continue
 
         return np.unique(np.array(boilerplate_hashes))
@@ -479,7 +482,7 @@ class CopyDetector:
                         self.force_language)
 
                 except UnicodeDecodeError:
-                    logging.warning(f"Skipping {code_f}: file not ASCII text")
+                    logging.warning("Skipping " + code_f + "file not ASCII text")
                     continue
 
     def _comparison_loop(self):
@@ -502,7 +505,7 @@ class CopyDetector:
                              for _ in range(len(self.test_files))]
 
         if not self.silent:
-            print(f"{time.time()-start_time:6.2f}: Beginning code comparison")
+            print("{:6.2f}: Beginning code comparison".format(time.time()-start_time))
 
         # this is used to track which files have been compared to avoid
         # unnecessary duplication when there is overlap between the
@@ -536,7 +539,7 @@ class CopyDetector:
                 self.token_overlap_matrix[i,j] = overlap
 
         if not self.silent:
-            print(f"{time.time()-start_time:6.2f}: Code comparison completed")
+            print("{:6.2f}: Code comparison completed".format(time.time()-start_time))
 
     def run(self):
         """Runs the copy detection loop for detecting overlap between
@@ -610,68 +613,68 @@ class CopyDetector:
         code_list.sort(key=lambda x: -x[0])
         return code_list
 
-    def generate_html_report(self, output_mode="save"):
-        """Generates an html report listing all files with similarity
-        above the display_threshold, with the copied code segments
-        highlighted.
+    # def generate_html_report(self, output_mode="save"):
+    #     """Generates an html report listing all files with similarity
+    #     above the display_threshold, with the copied code segments
+    #     highlighted.
 
-        Parameters
-        ----------
-        output_mode : {"save", "return"}
-            If "save", the output will be saved to the file specified
-            by self.out_file. If "return", the output HTML will be
-            directly returned by this function.
-        """
-        if len(self.similarity_matrix) == 0:
-            logging.error("Cannot generate report: no files compared")
-            return
+    #     Parameters
+    #     ----------
+    #     output_mode : {"save", "return"}
+    #         If "save", the output will be saved to the file specified
+    #         by self.out_file. If "return", the output HTML will be
+    #         directly returned by this function.
+    #     """
+        # if len(self.similarity_matrix) == 0:
+        #     logging.error("Cannot generate report: no files compared")
+            # return
 
-        code_list = self.get_copied_code_list()
-        data_dir = pkg_resources.resource_filename('copydetect', 'data/')
+        # code_list = self.get_copied_code_list()
+        # data_dir = pkg_resources.resource_filename('copydetect', 'data/')
 
-        plot_mtx = np.copy(self.similarity_matrix[:,:,0])
-        plot_mtx[plot_mtx == -1] = np.nan
-        plt.imshow(plot_mtx)
-        plt.colorbar()
-        plt.tight_layout()
-        sim_mtx_buffer = io.BytesIO()
-        plt.savefig(sim_mtx_buffer)
-        sim_mtx_buffer.seek(0)
-        sim_mtx_base64 = base64.b64encode(sim_mtx_buffer.read()).decode()
-        plt.close()
+        # plot_mtx = np.copy(self.similarity_matrix[:,:,0])
+        # plot_mtx[plot_mtx == -1] = np.nan
+        # plt.imshow(plot_mtx)
+        # plt.colorbar()
+        # plt.tight_layout()
+        # sim_mtx_buffer = io.BytesIO()
+        # plt.savefig(sim_mtx_buffer)
+        # sim_mtx_buffer.seek(0)
+        # sim_mtx_base64 = base64.b64encode(sim_mtx_buffer.read()).decode()
+        # plt.close()
 
-        scores=self.similarity_matrix[:,:,0][self.similarity_matrix[:,:,0]!=-1]
-        plt.hist(scores, bins=20)
-        plt.tight_layout()
-        sim_hist_buffer = io.BytesIO()
-        plt.savefig(sim_hist_buffer)
-        sim_hist_buffer.seek(0)
-        sim_hist_base64 = base64.b64encode(sim_hist_buffer.read()).decode()
-        plt.close()
+        # scores=self.similarity_matrix[:,:,0][self.similarity_matrix[:,:,0]!=-1]
+        # plt.hist(scores, bins=20)
+        # plt.tight_layout()
+        # sim_hist_buffer = io.BytesIO()
+        # plt.savefig(sim_hist_buffer)
+        # sim_hist_buffer.seek(0)
+        # sim_hist_base64 = base64.b64encode(sim_hist_buffer.read()).decode()
+        # plt.close()
 
         # render template with jinja and save as html
-        with open(data_dir + "report.html") as template_fp:
-            template = Template(template_fp.read())
+        # with open(data_dir + "report.html") as template_fp:
+        #     template = Template(template_fp.read())
 
-        flagged = self.similarity_matrix[:,:,0] > self.display_t
-        flagged_file_count = np.sum(np.any(flagged, axis=1))
+        # flagged = self.similarity_matrix[:,:,0] > self.display_t
+        # flagged_file_count = np.sum(np.any(flagged, axis=1))
 
-        output = template.render(test_count=len(self.test_files),
-                                 compare_count=len(self.ref_files),
-                                 flagged_file_count=flagged_file_count,
-                                 code_list=code_list,
-                                 sim_mtx_base64=sim_mtx_base64,
-                                 sim_hist_base64=sim_hist_base64)
+        # output = template.render(test_count=len(self.test_files),
+        #                          compare_count=len(self.ref_files),
+        #                          flagged_file_count=flagged_file_count,
+        #                          code_list=code_list,
+        #                          sim_mtx_base64=sim_mtx_base64,
+        #                          sim_hist_base64=sim_hist_base64)
 
-        if output_mode == "save":
-            with open(self.out_file, "w") as report_f:
-                report_f.write(output)
+        # if output_mode == "save":
+        #     with open(self.out_file, "w") as report_f:
+        #         report_f.write(output)
 
-            if not self.silent:
-                print(f"Output saved to {self.out_file.replace('//', '/')}")
-            if self.autoopen:
-                webbrowser.open('file://' + str(Path(self.out_file).resolve()))
-        elif output_mode == "return":
-            return output
-        else:
-            raise ValueError("output_mode not supported")
+        #     if not self.silent:
+        #         print("Output saved to {}".format(self.out_file.replace('//', '/')))
+        #     if self.autoopen:
+        #         webbrowser.open('file://' + str(Path(self.out_file).resolve()))
+        # elif output_mode == "return":
+        #     return output
+        # else:
+        #     raise ValueError("output_mode not supported")

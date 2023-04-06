@@ -9,14 +9,15 @@ import warnings
 from pygments import lexers, token
 import pygments.util
 import numpy as np
-from markupsafe import escape
+# from markupsafe import escape
 
 # if the C extention is available, use it. For almost all use cases
 # the speed difference is not significant so if the C extention isn't
 # found copydetect will silenty switch to the python implementation.
 try:
     from .winnow import _winnow
-except (ModuleNotFoundError, ImportError):
+# removing ModuleNotFoundError as this is not supported in python 3.4
+except (ImportError):
     from .pywinnow import _winnow
 
 def filter_code(code, filename, language=None):
@@ -33,13 +34,14 @@ def filter_code(code, filename, language=None):
             lexer = lexers.get_lexer_by_name(language)
         else:
             lexer = lexers.get_lexer_for_filename(filename)
+        # convert all tokens to lower case
         tokens = lexer.get_tokens(code)
     except pygments.util.ClassNotFound:
-        logging.warning(f"{filename} not tokenized: unknown file extension")
+        logging.warning("{} not tokenized: unknown file extension".format(filename))
         return code, np.array([])
 
     if lexer == pygments.lexers.TextLexer:
-        logging.warning(f"did not tokenize plaintext file {filename}")
+        logging.warning("did not tokenize plaintext file {}".format(filename))
         return code, np.array([])
 
     out_code = ""
@@ -75,7 +77,8 @@ def filter_code(code, filename, language=None):
                 offset += len(t[1]) - 1
         else:
             out_code += t[1]
-    return out_code, np.array(offsets)
+    # lowering the code to avoid false positives due to case insensitive languates
+    return out_code.lower(), np.array(offsets)
 
 def hashed_kgrams(string, k):
     """Return hashes of all k-grams in a string"""
@@ -133,13 +136,12 @@ def get_document_fingerprints(doc, k, window_size, boilerplate=[]):
     list of boilerplate hashes to remove from the winnowed list.
     Returns the selected hashes and their indexes in the original list
     """
-    hashes, idx = winnow(hashed_kgrams(doc, k=k), window_size=window_size)
+    hashes, idx = winnow(hashed_kgrams(doc, k=k), window_size=window_size,
+                         remove_duplicates=False)
     if len(boilerplate) > 0:
-        _, overlap_idx, _ = np.intersect1d(hashes, boilerplate,
-                                           return_indices=True,
-                                           assume_unique=True)
-        idx = np.delete(idx, overlap_idx)
-        hashes = np.delete(hashes, overlap_idx)
+        hash_mask = np.isin(hashes, boilerplate, invert=True)
+        hashes = hashes[hash_mask]
+        idx = idx[hash_mask]
     return hashes, idx
 
 def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
@@ -148,9 +150,11 @@ def find_fingerprint_overlap(hashes1, hashes2, idx1, idx2):
     and one for the second. The indexes of the original hashes are
     provided in case boilerplate results in gaps.
     """
-    overlap, ol_idx1, ol_idx2 = np.intersect1d(hashes1, hashes2,
-        return_indices=True, assume_unique=True)
-    return idx1[ol_idx1], idx2[ol_idx2]
+    # This will keep the duplicate indexes also
+    hashes1_mask = np.isin(hashes1, hashes2)
+    hashes2_mask = np.isin(hashes2, hashes1)
+
+    return idx1[hashes1_mask], idx2[hashes2_mask]
 
 def highlight_overlap(doc, slices, left_hl, right_hl,
                       truncate=-1, escape_html=False):
